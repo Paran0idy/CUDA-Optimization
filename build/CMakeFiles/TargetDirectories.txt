@@ -1,0 +1,3 @@
+/home/twoballs/projects/CUDA-Optimization/build/CMakeFiles/sgemm.dir
+/home/twoballs/projects/CUDA-Optimization/build/CMakeFiles/edit_cache.dir
+/home/twoballs/projects/CUDA-Optimization/build/CMakeFiles/rebuild_cache.dir
