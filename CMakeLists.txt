@@ -9,5 +9,9 @@ enable_language(CUDA) # Enable CUDA support, set this to your CUDA standard if n
 set(INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include)
 set(LIB_DIRS ${PROJECT_SOURCE_DIR}/lib)
 
+
+# add_library(sgemm_core STATIC ${INCLUDE_DIRS} ${LIB_DIRS}/sgemm.cu)
+
+include_directories(${INCLUDE_DIRS})
 add_executable(sgemm ${LIB_DIRS}/sgemm.cu)
-target_include_directories(sgemm PRIVATE ${INCLUDE_DIRS})
+target_link_libraries(sgemm cublas)
