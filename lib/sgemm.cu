@@ -523,13 +523,270 @@ float sgemm_v5(float *a, float *b, float *c, int M, int N, int K){
 
     return msecond;
 }
-// Pipeline
-__global__ void sgemm_v6(float *a, float *b, float*c, int M, int N, int K){
 
+// Pipeline
+__global__ void sgemm_v6_kernel(float *a, float *b, float*c, int M, int N, int K){
+    const int BLOCK_M = 128, BLOCK_N = 128, BLOCK_K = 8;
+    const int TILE = 8, NUM = 4;
+
+    __shared__ float shared_a[2][BLOCK_M][BLOCK_K];
+    __shared__ float shared_b[2][BLOCK_K][BLOCK_N];
+
+    float reg_a[TILE];
+    float reg_b[TILE];
+    float reg_c[TILE][TILE] = {0};
+
+    int tid = threadIdx.y * blockDim.x + threadIdx.x;
+
+    int smem_a_m = tid / 2;
+    int smem_a_k = (tid % 2) << 2;
+
+    int smem_b_k = tid / 32;
+    int smem_b_n = (tid % 32) << 2;
+
+    int gmem_a_m = smem_a_m + blockIdx.y * BLOCK_M;
+    int gmem_b_n = smem_b_n + blockIdx.x * BLOCK_N;
+
+    int gmem_a_k = smem_a_k;
+    int gmem_b_k = smem_b_k;
+
+    // Fisrt Stage
+    FLOAT4(shared_a[0][smem_a_m][smem_a_k]) = FLOAT4(a[OFFSET(gmem_a_m, gmem_a_k, K)]);
+    FLOAT4(shared_b[0][smem_b_k][smem_b_n]) = FLOAT4(b[OFFSET(gmem_b_k, gmem_b_n, N)]);
+    __syncthreads();
+
+    for(int k = 1; k <= K / BLOCK_K; k++){
+        int gmem_a_k = smem_a_k + k * BLOCK_K;
+        int gmem_b_k = smem_b_k + k * BLOCK_K;
+
+        int idx = k % 2;
+        // Copy
+        if(k < K / BLOCK_K){
+            FLOAT4(shared_a[idx][smem_a_m][smem_a_k]) = FLOAT4(a[OFFSET(gmem_a_m, gmem_a_k, K)]);
+            FLOAT4(shared_b[idx][smem_b_k][smem_b_n]) = FLOAT4(b[OFFSET(gmem_b_k, gmem_b_n, N)]);
+            __syncthreads();
+        }
+
+        // Compute
+        for(int kk = 0; kk < BLOCK_K; kk++){
+            int ty = threadIdx.y * TILE;
+            int tx = threadIdx.x * NUM;
+
+            for(int i = 0; i < TILE; i++) 
+                reg_a[i] = shared_a[(idx + 1) % 2][ty + i][kk];
+            
+            for(int per = 0; per < 2; per++)
+                for(int i = 0; i < NUM; i++)
+                    reg_b[i + per * NUM] = shared_b[(idx + 1) % 2][kk][tx + i + per * BLOCK_N / 2];
+            
+            // Compute NUM = 4
+            for(int i = 0; i < TILE; i++)
+                for(int j = 0; j < TILE; j++)
+                    reg_c[i][j] += reg_a[i] * reg_b[j];
+        }
+        __syncthreads();
+    }
+    // Write Back
+    int row = blockIdx.y * BLOCK_M + threadIdx.y * TILE;
+    int col = blockIdx.x * BLOCK_N + threadIdx.x * NUM;
+
+
+    for(int m = 0; m < TILE; m++){
+        int r_c_1 = row + m;
+        int c_c_1 = col;
+        int c_c_2 = c_c_1 + BLOCK_N / 2;
+        FLOAT4(c[OFFSET(r_c_1, c_c_1, N)]) = FLOAT4(reg_c[m][0]);
+        FLOAT4(c[OFFSET(r_c_1, c_c_2, N)]) = FLOAT4(reg_c[m][NUM]);
+    }
 }
 
+float sgemm_v6(float *a, float *b, float *c, int M, int N, int K){
+    size_t size_a = sizeof(float) * M * K;
+    size_t size_b = sizeof(float) * K * N;
+    size_t size_c = sizeof(float) * M * N;
+
+
+    float *da, *db, *dc;
+    cudaMalloc(&da, size_a);
+    cudaMalloc(&db, size_b);
+    cudaMalloc(&dc, size_c);
+
+    cudaMemcpy(da, a, size_a, cudaMemcpyHostToDevice);
+    cudaMemcpy(db, b, size_b, cudaMemcpyHostToDevice);
+
+    const int BLOCK_M = 128, BLOCK_N = 128, TILE = 8;
+    dim3 grid(N / BLOCK_N, M / BLOCK_M);
+    dim3 block(BLOCK_N / TILE, BLOCK_M / TILE);
+
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start, 0);
+    sgemm_v6_kernel<<<grid, block>>>(da, db, dc, M, N, K);
+    cudaEventRecord(stop, 0);
+
+    cudaEventSynchronize(stop);
+
+
+    float msecond = 0.0;
+    cudaEventElapsedTime(&msecond, start, stop);
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    cudaMemcpy(c, dc, size_c, cudaMemcpyDeviceToHost);
+
+    cudaFree(da);
+    cudaFree(db);
+    cudaFree(dc);
+
+    return msecond;
+}
+
+
+// Transpose Load A
+__global__ void sgemm_v7_kernel(float *a, float *b, float*c, int M, int N, int K){
+    const int BLOCK_M = 128, BLOCK_N = 128, BLOCK_K = 8;
+    const int TILE = 8, NUM = 4;
+
+    __shared__ float shared_a[3][BLOCK_K][BLOCK_M];
+    __shared__ float shared_b[3][BLOCK_K][BLOCK_N];
+
+    float reg_a[TILE];
+    float reg_b[TILE];
+    float reg_c[TILE][TILE] = {0};
+
+    int tid = threadIdx.y * blockDim.x + threadIdx.x;
+
+    int smem_a_m = tid / 2;
+    int smem_a_k = (tid % 2) << 2;
+
+    int smem_b_k = tid / 32;
+    int smem_b_n = (tid % 32) << 2;
+
+    int gmem_a_m = smem_a_m + blockIdx.y * BLOCK_M;
+    int gmem_b_n = smem_b_n + blockIdx.x * BLOCK_N;
+
+    int gmem_a_k = smem_a_k;
+    int gmem_b_k = smem_b_k;
+
+    // Fisrt Stage
+    float load_a[4];
+
+    FLOAT4(load_a[0]) = FLOAT4(a[OFFSET(gmem_a_m, gmem_a_k, K)]);
+    shared_a[0][smem_a_k + 0][smem_a_m] = load_a[0];
+    shared_a[0][smem_a_k + 1][smem_a_m] = load_a[1];
+    shared_a[0][smem_a_k + 2][smem_a_m] = load_a[2];
+    shared_a[0][smem_a_k + 3][smem_a_m] = load_a[3];
+    FLOAT4(shared_b[0][smem_b_k][smem_b_n]) = FLOAT4(b[OFFSET(gmem_b_k, gmem_b_n, N)]);
+    __syncthreads();
+
+    for(int k = 1; k <= K / BLOCK_K; k++){
+        int gmem_a_k = smem_a_k + k * BLOCK_K;
+        int gmem_b_k = smem_b_k + k * BLOCK_K;
+
+        int idx = k % 2;
+        // Copy
+        if(k < K / BLOCK_K){
+            FLOAT4(load_a[0]) = FLOAT4(a[OFFSET(gmem_a_m, gmem_a_k, K)]);
+            shared_a[idx][smem_a_k + 0][smem_a_m] = load_a[0];
+            shared_a[idx][smem_a_k + 1][smem_a_m] = load_a[1];
+            shared_a[idx][smem_a_k + 2][smem_a_m] = load_a[2];
+            shared_a[idx][smem_a_k + 3][smem_a_m] = load_a[3];
+
+            FLOAT4(shared_b[idx][smem_b_k][smem_b_n]) = FLOAT4(b[OFFSET(gmem_b_k, gmem_b_n, N)]);
+            __syncthreads();
+        }
+
+        // Compute
+        for(int kk = 0; kk < BLOCK_K; kk++){
+            int ty = threadIdx.y * TILE;
+            int tx = threadIdx.x * NUM;
+
+            for(int i = 0; i < TILE; i++) 
+                reg_a[i] = shared_a[(idx + 1) % 2][kk][ty + i];
+            
+            for(int per = 0; per < 2; per++)
+                for(int i = 0; i < NUM; i++)
+                    reg_b[i + per * NUM] = shared_b[(idx + 1) % 2][kk][tx + i + per * BLOCK_N / 2];
+                
+            
+            // Compute NUM = 4
+            for(int i = 0; i < TILE; i++)
+                for(int j = 0; j < TILE; j++)
+                    reg_c[i][j] += reg_a[i] * reg_b[j];
+        }
+        __syncthreads();
+    }
+    // Write Back
+    int row = blockIdx.y * BLOCK_M + threadIdx.y * TILE;
+    int col = blockIdx.x * BLOCK_N + threadIdx.x * NUM;
+
+    for(int m = 0; m < TILE; m++){
+        int r_c_1 = row + m;
+        int c_c_1 = col;
+        int c_c_2 = c_c_1 + BLOCK_N / 2;
+        FLOAT4(c[OFFSET(r_c_1, c_c_1, N)]) = FLOAT4(reg_c[m][0]);
+        FLOAT4(c[OFFSET(r_c_1, c_c_2, N)]) = FLOAT4(reg_c[m][NUM]);
+    }
+}
+
+float sgemm_v7(float *a, float *b, float *c, int M, int N, int K){
+    size_t size_a = sizeof(float) * M * K;
+    size_t size_b = sizeof(float) * K * N;
+    size_t size_c = sizeof(float) * M * N;
+
+
+    float *da, *db, *dc;
+    cudaMalloc(&da, size_a);
+    cudaMalloc(&db, size_b);
+    cudaMalloc(&dc, size_c);
+
+    cudaMemcpy(da, a, size_a, cudaMemcpyHostToDevice);
+    cudaMemcpy(db, b, size_b, cudaMemcpyHostToDevice);
+
+    const int BLOCK_M = 128, BLOCK_N = 128, TILE = 8;
+    dim3 grid(N / BLOCK_N, M / BLOCK_M);
+    dim3 block(BLOCK_N / TILE, BLOCK_M / TILE);
+
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start, 0);
+    sgemm_v7_kernel<<<grid, block>>>(da, db, dc, M, N, K);
+    cudaEventRecord(stop, 0);
+
+    cudaEventSynchronize(stop);
+
+
+    float msecond = 0.0;
+    cudaEventElapsedTime(&msecond, start, stop);
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    cudaMemcpy(c, dc, size_c, cudaMemcpyDeviceToHost);
+
+    cudaFree(da);
+    cudaFree(db);
+    cudaFree(dc);
+
+    // for(int i = 0; i < M; i++){
+    //     for(int j = 0; j < N; j++)
+    //         std::cout << c[OFFSET(i, j, N)] << " ";
+    //     std::cout << std::endl;
+    // }
+
+    return msecond;
+}
+
+
+
+
 // WMMA
-__global__ void sgemm_v7(float *a, float *b, float*c, int M, int N, int K){
+__global__ void sgemm_v8(float *a, float *b, float*c, int M, int N, int K){
 
 }
 
@@ -601,8 +858,10 @@ void testPerformance(Func func, int M, int N, int K, int nums){
     float *b = (float*)malloc(size_b);
     float *c = (float*)malloc(size_c);
 
-    data_init(a, M * K);
-    data_init(b, K * N);
+    // data_init(a, M * K);
+    // data_init(b, K * N);
+    for(int i = 0; i < M * K; i++) a[i] = 1.0;
+    for(int i = 0; i < K * N; i++) b[i] = 1.0;
 
     float avg = 0;
     for(int i = 0; i < nums; i++)
@@ -627,6 +886,8 @@ int main(){
     testPerformance(sgemm_v3, M, N, K, 1);
     testPerformance(sgemm_v4, M, N, K ,1);
     testPerformance(sgemm_v5, M, N, K, 1);
+    testPerformance(sgemm_v6, M, N, K, 1);
+    testPerformance(sgemm_v7, M, N, K, 1);
 
     // testPerformance(sgemm_cublas, M, N, K, 10);
 
