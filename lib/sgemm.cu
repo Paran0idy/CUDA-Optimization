@@ -346,7 +346,7 @@ __global__ void sgemm_v4_kernel(float *a, float *b, float*c, int M, int N, int K
             
             for(int per = 0; per < 2; per++)
                 for(int i = 0; i < NUM; i++)
-                    reg_b[i + per * NUM] = shared_b[kk][tx + i + per * NUM];
+                    reg_b[i + per * NUM] = shared_b[kk][tx + i + per * WARP_N / 2];
             
             // Compute NUM = 4
             for(int i = 0; i < TILE; i++)
@@ -406,13 +406,6 @@ float sgemm_v4(float *a, float *b, float *c, int M, int N, int K){
     cudaEventDestroy(stop);
 
     cudaMemcpy(c, dc, size_c, cudaMemcpyDeviceToHost);
-
-
-    // for(int i = 0; i < M; i++){
-    //     for(int j = 0; j < N; j++)
-    //         std::cout << c[OFFSET(i, j, N)] << " ";
-    //     std::cout << std::endl;
-    // }
 
     cudaFree(da);
     cudaFree(db);
@@ -524,22 +517,12 @@ float sgemm_v5(float *a, float *b, float *c, int M, int N, int K){
 
     cudaMemcpy(c, dc, size_c, cudaMemcpyDeviceToHost);
 
-
-    // for(int i = 0; i < M; i++){
-    //     for(int j = 0; j < N; j++)
-    //         std::cout << c[OFFSET(i, j, N)] << " ";
-    //     std::cout << std::endl;
-    // }
-
     cudaFree(da);
     cudaFree(db);
     cudaFree(dc);
 
     return msecond;
 }
-
-
-
 // Pipeline
 __global__ void sgemm_v6(float *a, float *b, float*c, int M, int N, int K){
 
@@ -618,10 +601,8 @@ void testPerformance(Func func, int M, int N, int K, int nums){
     float *b = (float*)malloc(size_b);
     float *c = (float*)malloc(size_c);
 
-    // data_init(a, M * K);
-    // data_init(b, K * N);
-    for(int i = 0; i < M * K; i++) a[i] = 1.0;
-    for(int i = 0; i < K * N; i++) b[i] = 1.0;
+    data_init(a, M * K);
+    data_init(b, K * N);
 
     float avg = 0;
     for(int i = 0; i < nums; i++)
@@ -641,12 +622,11 @@ void testPerformance(Func func, int M, int N, int K, int nums){
 int main(){
     int M = 1024, N = 1024, K = 1024;
 
-    testPerformance(sgemm_v1, M, N, K, 10);
-    testPerformance(sgemm_v2, M, N, K, 10);
-    testPerformance(sgemm_v3, M, N, K, 10);
-    testPerformance(sgemm_v4, M, N, K, 10);
-    testPerformance(sgemm_v5, M, N, K, 10);
-
+    testPerformance(sgemm_v1, M, N, K, 1);
+    testPerformance(sgemm_v2, M, N, K, 1);
+    testPerformance(sgemm_v3, M, N, K, 1);
+    testPerformance(sgemm_v4, M, N, K ,1);
+    testPerformance(sgemm_v5, M, N, K, 1);
 
     // testPerformance(sgemm_cublas, M, N, K, 10);
 
