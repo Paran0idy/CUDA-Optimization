@@ -5,6 +5,8 @@
 #include <random>
 #include <string>
 #include <cstdio>
+#include <fstream>
+
 using namespace std;
 
 // MARCO
@@ -1025,6 +1027,10 @@ void testPerformance(std::pair<Func, string> func, int M, int N, int K, int nums
     free(c);
 
     printf("times: %.6f tflops: %.6f %s\n", avg, tflops, func.second.c_str());
+
+    std::ofstream outFile("../sgemm.txt", std::ios::app);
+
+    outFile << avg << " " << tflops << " " << func.second.c_str() << std::endl;
 }
 
 
