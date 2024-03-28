@@ -4,6 +4,7 @@
 #include <functional>
 #include <random>
 #include <string>
+#include <cstdio>
 using namespace std;
 
 // MARCO
@@ -940,54 +941,54 @@ __global__ void sgemm_v9(float *a, float *b, float*c, int M, int N, int K){
 
 }
 
-float sgemm_cublas(float *a, float *b, float *c, int M, int N, int K){
+// float sgemm_cublas(float *a, float *b, float *c, int M, int N, int K){
 
-    cublasHandle_t handle;
-    CUBLAS_CHECK(cublasCreate(&handle));
+//     cublasHandle_t handle;
+//     CUBLAS_CHECK(cublasCreate(&handle));
 
-    float cublas_alpha = 1.0;
-    float cublas_beta = 0;
+//     float cublas_alpha = 1.0;
+//     float cublas_beta = 0;
 
-    size_t size_a = sizeof(float) * M * K;
-    size_t size_b = sizeof(float) * K * N;
-    size_t size_c = sizeof(float) * M * N;
+//     size_t size_a = sizeof(float) * M * K;
+//     size_t size_b = sizeof(float) * K * N;
+//     size_t size_c = sizeof(float) * M * N;
 
-    float *da, *db, *dc;
-    CUDA_CHECK(cudaMalloc(&da, size_a));
-    CUDA_CHECK(cudaMalloc(&db, size_b));
-    CUDA_CHECK(cudaMalloc(&dc, size_c));
+//     float *da, *db, *dc;
+//     CUDA_CHECK(cudaMalloc(&da, size_a));
+//     CUDA_CHECK(cudaMalloc(&db, size_b));
+//     CUDA_CHECK(cudaMalloc(&dc, size_c));
 
-    cudaMemcpy(da, a, size_a, cudaMemcpyHostToDevice);
-    cudaMemcpy(db, b, size_b, cudaMemcpyHostToDevice);
+//     cudaMemcpy(da, a, size_a, cudaMemcpyHostToDevice);
+//     cudaMemcpy(db, b, size_b, cudaMemcpyHostToDevice);
 
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
+//     cudaEvent_t start, stop;
+//     cudaEventCreate(&start);
+//     cudaEventCreate(&stop);
 
-    float msecond = 0.0;
-    cudaEventRecord(start);
+//     float msecond = 0.0;
+//     cudaEventRecord(start);
     
-    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &cublas_alpha, db, N, da, K, &cublas_beta, dc, N);
+//     cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &cublas_alpha, db, N, da, K, &cublas_beta, dc, N);
 
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
+//     cudaEventRecord(stop);
+//     cudaEventSynchronize(stop);
 
 
-    cudaEventElapsedTime(&msecond, start, stop);
+//     cudaEventElapsedTime(&msecond, start, stop);
     
-    cudaMemcpy(c, dc, size_c, cudaMemcpyDeviceToHost);
+//     cudaMemcpy(c, dc, size_c, cudaMemcpyDeviceToHost);
 
-    cudaFree(da);
-    cudaFree(db);
-    cudaFree(dc);
+//     cudaFree(da);
+//     cudaFree(db);
+//     cudaFree(dc);
     
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+//     cudaEventDestroy(start);
+//     cudaEventDestroy(stop);
 
-    cublasDestroy(handle);
+//     cublasDestroy(handle);
 
-    return msecond;
-}
+//     return msecond;
+// }
 
 using Func = std::function<float(float *, float *, float *c, int, int, int)>;
 
@@ -1017,11 +1018,13 @@ void testPerformance(std::pair<Func, string> func, int M, int N, int K, int nums
     for(int i = 0; i < nums; i++)
         avg += func.first(a, b, c, M, N, K) / nums;
     
+    float tflops = 2.0f * M * N * K / (avg / 1e3) / 1e12;
+    
     free(a);
     free(b);
     free(c);
 
-    std::cout << avg << " : " << func.second << std::endl;
+    printf("times: %.6f tflops: %.6f %s\n", avg, tflops, func.second.c_str());
 }
 
 
@@ -1041,7 +1044,7 @@ int main(){
     testPerformance(std::make_pair(sgemm_v7, "sgemm_v7 - Transpose Load A && Pipeline"), M, N, K, 100);
     testPerformance(std::make_pair(sgemm_v8, "sgemm_v8 - Transpose Load A"), M, N, K, 100);
 
-    testPerformance(std::make_pair(sgemm_cublas, "sgemm_cublas"), M, N, K, 100);
+    // testPerformance(std::make_pair(sgemm_cublas, "sgemm_cublas"), M, N, K, 100);
 
 
     return 0;
