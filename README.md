@@ -26,6 +26,9 @@ TODO
 ### 12. Ampere ASM
 TODO
 
+### 13. OpenAI Triton
+
+
 ## Softmax
 TODO
 
@@ -37,5 +40,8 @@ TODO
 ```bash
 python ./script.py
 ```
+### Install OpenAI Triton
 
-
+```bash
+pip install triton
+```
