@@ -13,5 +13,16 @@ set(LIB_DIRS ${PROJECT_SOURCE_DIR}/lib)
 # add_library(sgemm_core STATIC ${INCLUDE_DIRS} ${LIB_DIRS}/sgemm.cu)
 
 include_directories(${INCLUDE_DIRS})
-add_executable(sgemm ${LIB_DIRS}/sgemm.cu)
-target_link_libraries(sgemm cublas)
+
+option(matmul "matmul" ON)
+option(softmax "softmax" OFF)
+
+if (matmul)
+    add_executable(sgemm ${LIB_DIRS}/sgemm.cu)
+    target_link_libraries(sgemm cublas)
+endif ()
+
+if (softmax)
+    add_executable(softmax ${LIB_DIRS}/softmax.cu)
+    target_link_libraries(softmax)
+endif ()
