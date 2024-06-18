@@ -38,7 +38,7 @@ TODO
 ## Build
 
 ```bash
-python ./script.py
+python3 ./script.py
 ```
 ### Install OpenAI Triton
 

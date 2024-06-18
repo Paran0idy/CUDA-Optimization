@@ -1,8 +1,0 @@
-571.805 0.24036 sgemm_v1 - Naive
-150.745 0.91173 sgemm_v2 - Block Tiling
-30.9823 4.43605 sgemm_v3 - Thread Tiling
-34.6455 3.96701 sgemm_v4 - Warp Tiling
-23.2696 5.90637 sgemm_v5 - Bank Free
-30.0489 4.57384 sgemm_v6 - Pipeline
-20.7374 6.6276 sgemm_v7 - Transpose Load A && Pipeline
-20.7621 6.61972 sgemm_v8 - Transpose Load A
