@@ -30,6 +30,12 @@ TODO
 
 
 ## Softmax
+
+
+### 1. Naive
+TODO
+### 2. WarpAllReduce
+### 3. BlockAllReduce
 TODO
 
 ## Reduction
