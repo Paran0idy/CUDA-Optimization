@@ -824,7 +824,7 @@ __global__ void sgemm_v8_kernel(float *a, float *b, float*c, int M, int N, int K
     const int BLOCK_M = 128, BLOCK_N = 128, BLOCK_K = 8;
     const int TILE = 8, NUM = 4;
 
-    __shared__ float shared_a[BLOCK_K][BLOCK_N];
+    __shared__ float shared_a[BLOCK_K][BLOCK_M];
     __shared__ float shared_b[BLOCK_K][BLOCK_N];
 
     float reg_a[TILE];
@@ -934,13 +934,6 @@ float sgemm_v8(float *a, float *b, float *c, int M, int N, int K){
     cudaFree(dc);
 
     return msecond;
-}
-
-
-
-// WMMA
-__global__ void sgemm_v9(float *a, float *b, float*c, int M, int N, int K){
-
 }
 
  float sgemm_cublas(float *a, float *b, float *c, int M, int N, int K){
