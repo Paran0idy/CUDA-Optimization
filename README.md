@@ -5,7 +5,6 @@ A repo for writing high performance cuda kernel, such as gemm, softmax and reduc
 In future, I will merge OpenAI triton to this repo inorder to compare its performance with cuda kernel.
 
 
-
 ## SGEMM
 + M = N = K = 1024
 ![sgemm](./sgemm.png "sgemm")
@@ -19,18 +18,23 @@ In future, I will merge OpenAI triton to this repo inorder to compare its perfor
 ### 7. Transpose Load A && Pipline
 ### 8. Transpose Load A
 ### 9. cuBLAS
-### 10. WMMA
+
+## WMMA
+### 1. Naive
+### 2. Auto Tune
 TODO
-### 11. Auto Tune
-TODO
-### 12. Ampere ASM
+### 3. Ampere ASM
 TODO
 
-### 13. OpenAI Triton
+## OpenAI Triton
 
+## SGEMV
+### 1. Naive
+### 2. Block Tiling
+### 3. Warp AllReduce
 
 ## Softmax
-TODO
+### 1. Warp AllReduce
 
 ## Reduction
 TODO

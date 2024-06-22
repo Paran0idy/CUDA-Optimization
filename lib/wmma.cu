@@ -69,6 +69,18 @@ __global__ void wmma_v1(half *a, half *b, half *c, int M, int N, int K) {
             wmma::store_matrix_sync(&c[OFFSET(row, col, N) + i * 16 * N + j * 16], frag_c[i][j], N, wmma::mem_row_major);
 }
 
+__global__ void wmma_v2(half *a, half *b, half *c, int M, int N, int K) {
+    int tid = threadIdx.y * blockDim.x + threadIdx.x;
+    int origin = tid;
+    asm("add.s32 %0, %1, %2;"
+        : "=r"(tid)
+        : "r"(tid), "r"(1));
+
+    c[origin] = tid - origin;
+}
+
+
+
 
 int main() {
     int M = 128, N = 128, K = 128;
@@ -93,7 +105,7 @@ int main() {
 
     cudaMemcpy(da, a, size_a, cudaMemcpyHostToDevice);
     cudaMemcpy(db, b, size_b, cudaMemcpyHostToDevice);
-    wmma_v1<<<block, thread>>>(da, db, dc, M, N, K);
+    wmma_v2<<<block, thread>>>(da, db, dc, M, N, K);
     cudaMemcpy(c, dc, size_c, cudaMemcpyDeviceToHost);
 
     for (int i = 0; i < M; i++) {
